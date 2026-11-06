@@ -1,0 +1,323 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PLAYER
+  SUPPORT
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum LedgerType {
+  DEPOSIT
+  WITHDRAW
+  BET
+  WIN
+  REFUND
+  BONUS
+  ADJUSTMENT
+}
+
+enum GameKind {
+  ORIGINAL
+  SLOT
+}
+
+enum GameStatus {
+  LIVE
+  SOON
+  DISABLED
+  MAINTENANCE
+}
+
+enum RoundStatus {
+  PENDING
+  SETTLED
+  CANCELLED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Login account. Physical table matches Rosa `users`.
+model User {
+  id                     String     @id @default(cuid())
+  agentCode              String     @default("linbet") @map("agentCode")
+  parentPath             String     @default("") @map("parentPath")
+  userCode               String     @unique @map("userCode")
+  email                  String     @unique
+  passwordHash           String     @map("passwordHash")
+  role                   Role       @default(PLAYER)
+  status                 UserStatus @default(ACTIVE)
+  gameStop               Boolean    @default(false) @map("gameStop")
+  currency               String     @default("USD")
+  balance                Int        @default(0)
+  version                Int        @default(0)
+  targetRtp              Float      @default(96) @map("targetRtp")
+  realRtp                Float      @default(0) @map("realRtp")
+  totalDebit             Int        @default(0) @map("totalDebit")
+  totalCredit            Int        @default(0) @map("totalCredit")
+  totalCallWin           Float      @default(0) @map("totalCallWin")
+  dailyDepositCap        Int?       @map("dailyDepositCap")
+  dailyBetCap            Int?       @map("dailyBetCap")
+  coolOffUntil           DateTime?  @map("coolOffUntil")
+  clientSeed             String     @default("player-seed") @map("clientSeed")
+  serverSeed             String     @default("") @map("serverSeed")
+  serverSeedHash         String     @default("") @map("serverSeedHash")
+  seedNonce              Int        @default(0) @map("seedNonce")
+  previousServerSeed     String?    @map("previousServerSeed")
+  previousServerSeedHash String?    @map("previousServerSeedHash")
+  seedRotatedAt          DateTime   @default(now()) @map("seedRotatedAt")
+  createdAt              DateTime   @default(now()) @map("createdAt")
+  updatedAt              DateTime   @updatedAt @map("updatedAt")
+
+  ledger        LedgerEntry[]
+  withdrawals   Withdrawal[]
+  rounds        GameRound[]
+  chat          ChatMessage[]
+  resets        PasswordReset[]
+  audits        AuditLog[]      @relation("AuditActor")
+  adminSessions AdminSession[]
+  adminLogins   AdminLogin[]
+
+  @@index([status])
+  @@index([agentCode, userCode])
+  @@map("users")
+}
+
+model Invite {
+  code      String   @id
+  maxUses   Int      @default(99999) @map("maxUses")
+  uses      Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("createdAt")
+
+  @@map("invites")
+}
+
+model LedgerEntry {
+  id           String     @id @default(cuid())
+  userId       String     @map("userId")
+  user         User       @relation(fields: [userId], references: [id])
+  type         LedgerType
+  amount       Int
+  balanceAfter Int        @map("balanceAfter")
+  note         String
+  refType      String?    @map("refType")
+  refId        String?    @map("refId")
+  createdAt    DateTime   @default(now()) @map("createdAt")
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+  @@index([refType, refId])
+  @@map("player_ledgers")
+}
+
+model Withdrawal {
+  id         String           @id @default(cuid())
+  userId     String           @map("userId")
+  user       User             @relation(fields: [userId], references: [id])
+  amount     Int
+  status     WithdrawalStatus @default(PENDING)
+  note       String           @default("Withdrawal")
+  reviewedBy String?          @map("reviewedBy")
+  reviewedAt DateTime?        @map("reviewedAt")
+  createdAt  DateTime         @default(now()) @map("createdAt")
+
+  @@index([status, createdAt])
+  @@map("player_withdrawals")
+}
+
+model Game {
+  id           String     @id @default(cuid())
+  slug         String     @unique
+  provider     String     @default("Originals")
+  providerCode String     @default("") @map("providerCode")
+  kind         GameKind   @default(ORIGINAL) @map("gameType")
+  enName       String     @default("") @map("enName")
+  name         String     @map("koName")
+  gameCode     String     @default("") @map("gameCode")
+  banner       String     @default("")
+  status       GameStatus @default(SOON)
+  houseEdge    Float      @default(0.01) @map("houseEdge")
+  minBet       Int        @default(100) @map("minBet")
+  maxBet       Int        @default(1000000) @map("maxBet")
+  blurb        String     @default("")
+  rounds       GameRound[]
+
+  @@index([providerCode, gameCode])
+  @@index([kind, status])
+  @@map("games")
+}
+
+model GameRound {
+  id                 String      @id @default(cuid())
+  userId             String      @map("userId")
+  user               User        @relation(fields: [userId], references: [id])
+  gameId             String      @map("gameId")
+  game               Game        @relation(fields: [gameId], references: [id])
+  agentCode          String      @default("linbet") @map("agentCode")
+  userCode           String      @default("") @map("userCode")
+  providerCode       String      @default("") @map("providerCode")
+  gameCode           String      @default("") @map("gameCode")
+  gameCategory       String      @default("") @map("gameCategory")
+  playType           String      @default("") @map("gameType")
+  txnType            String      @default("") @map("txnType")
+  status             RoundStatus @default(PENDING)
+  betAmount          Int         @map("bet")
+  payout             Int         @default(0) @map("win")
+  multiplier         Float       @default(0)
+  nonce              Int
+  clientSeed         String      @map("clientSeed")
+  serverSeedHash     String      @map("serverSeedHash")
+  serverSeedRevealed String?     @map("serverSeedRevealed")
+  result             Json?
+  extraInfo          String      @default("") @map("extraInfo")
+  roundFinished      Boolean     @default(false) @map("roundFinished")
+  patternId          String      @default("") @map("patternId")
+  txnId              String?     @map("txnId")
+  externalRoundId    String?     @map("roundId")
+  idempotencyKey     String?     @map("idempotencyKey")
+  userStartBalance   Int         @default(0) @map("userStartBalance")
+  userEndBalance     Int         @default(0) @map("userEndBalance")
+  realRtp            Float       @default(0) @map("realRtp")
+  targetRtp          Float       @default(0) @map("targetRtp")
+  totalDebit         Int         @default(0) @map("totalDebit")
+  totalCredit        Int         @default(0) @map("totalCredit")
+  betAt              DateTime?   @map("betAt")
+  startedAt          DateTime    @default(now()) @map("createdAt")
+  settledAt          DateTime?   @map("processedAt")
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, startedAt])
+  @@index([gameId, startedAt])
+  @@index([userId, status])
+  @@index([externalRoundId])
+  @@index([txnId])
+  @@map("game_histories")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String?  @map("userId")
+  user      User?    @relation(fields: [userId], references: [id])
+  nick      String   @map("userCode")
+  text      String
+  system    Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("createdAt")
+
+  @@index([createdAt])
+  @@map("chat_messages")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?  @map("actorId")
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id])
+  action     String
+  targetType String   @map("targetType")
+  targetId   String   @map("targetId")
+  payload    Json?
+  createdAt  DateTime @default(now()) @map("createdAt")
+
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String    @map("userId")
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique @map("tokenHash")
+  expiresAt DateTime  @map("expiresAt")
+  usedAt    DateTime? @map("usedAt")
+  createdAt DateTime  @default(now()) @map("createdAt")
+
+  @@map("player_password_resets")
+}
+
+model CrashRound {
+  id         String    @id @default(cuid())
+  phase      String    @default("WAITING")
+  crashPoint Float     @map("crashPoint")
+  serverSeed String    @map("serverSeed")
+  seedHash   String    @map("seedHash")
+  nonce      Int
+  startedAt  DateTime  @default(now()) @map("startedAt")
+  playAt     DateTime? @map("playAt")
+  crashedAt  DateTime? @map("crashedAt")
+
+  @@index([startedAt])
+  @@index([phase])
+  @@map("game_crash_rounds")
+}
+
+model Setting {
+  key   String @id @map("settingKey")
+  value String
+
+  @@map("site_settings")
+}
+
+model Provider {
+  id           String     @id @default(cuid())
+  code         String     @unique
+  providerCode String     @unique @default("") @map("providerCode")
+  name         String
+  category     String     @map("type")
+  domains      String     @default("")
+  status       GameStatus @default(SOON)
+  config       String     @default("")
+  walletMode   String     @default("none") @map("walletMode")
+  callbackPath String     @default("") @map("endpoint")
+  notes        String     @default("")
+  sortOrder    Int        @default(0) @map("sortOrder")
+  updatedAt    DateTime   @updatedAt @map("updatedAt")
+
+  @@index([status])
+  @@map("providers")
+}
+
+model AdminSession {
+  id        String    @id @default(cuid())
+  userId    String    @map("userId")
+  user      User      @relation(fields: [userId], references: [id])
+  ip        String    @default("-")
+  ua        String    @default("")
+  loginAt   DateTime  @default(now()) @map("loginAt")
+  lastSeen  DateTime  @default(now()) @map("lastSeen")
+  revokedAt DateTime? @map("revokedAt")
+
+  @@index([userId, revokedAt])
+  @@index([lastSeen])
+  @@map("admin_sessions")
+}
+
+model AdminLogin {
+  id        String   @id @default(cuid())
+  userId    String?  @map("userId")
+  user      User?    @relation(fields: [userId], references: [id])
+  email     String
+  nick      String   @default("") @map("userCode")
+  ok        Boolean
+  reason    String
+  ip        String   @default("-")
+  ua        String   @default("")
+  createdAt DateTime @default(now()) @map("createdAt")
+
+  @@index([createdAt])
+  @@map("admin_logins")
+}

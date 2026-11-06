@@ -1,0 +1,28 @@
+{
+  "name": "01-usersite",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Linbet user site — Express + EJS port of the 501 frontend",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build:css": "tailwindcss -i input.css -o public/css/app.css --minify",
+    "build:games": "node build.js",
+    "build": "npm run build:css && npm run build:games"
+  },
+  "dependencies": {
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "http-proxy-middleware": "^3.0.5",
+    "lucide-react": "^1.47.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "socket.io-client": "^4.8.1",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "esbuild": "^0.25.10",
+    "tailwindcss": "^4.1.14"
+  }
+}

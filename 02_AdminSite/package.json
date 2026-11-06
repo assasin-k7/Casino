@@ -1,0 +1,18 @@
+{
+  "name": "linbet-admin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "esbuild": "^0.25.10",
+    "express": "^4.21.2",
+    "http-proxy-middleware": "^3.0.5",
+    "lucide-react": "^1.47.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zustand": "^5.0.15"
+  }
+}
